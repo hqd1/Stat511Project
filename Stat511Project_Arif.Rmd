@@ -1,0 +1,81 @@
+---
+title: "STAT 511 Project - Data Exploration"
+author: "Arif"
+date: "November 18, 2017"
+output: pdf_document
+classoption: landscape
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(kableExtra)
+library(GGally)
+setwd("H:/Stat511/Project")
+```
+```{r pressure, echo=FALSE, results='hide'}
+
+monthlyFire = read.csv("Monthly_forRegression.csv")
+attach(monthlyFire)
+#fix(monthlyFire)
+names(monthlyFire)
+names(monthlyFire)[names(monthlyFire)=="Avg_FRP"] <- "y1"
+names(monthlyFire)[names(monthlyFire)=="FireCount"] <- "y2"
+```
+# Exploratory analysis
+## Linear regression model fitting and diagnostics 
+### Model Outputs  
+```{r echo=FALSE, fig.align='center', fig.height = 7, fig.width = 8}
+
+##Linear Model Fitting 
+
+ls_model1 <- lm(y1~. - y2 -Month -Year - Year, data=monthlyFire)
+#summary(ls_model)
+
+kable(summary(ls_model1)$coeff, caption='Model 1 (Response: Fire Intensity)')
+
+```
+\newpage
+
+```{r echo=FALSE, fig.align='center', fig.height = 7, fig.width = 8}
+ls_model2 <- lm(y2~. - y1 -Month -Year - Year, data=monthlyFire)
+#summary(ls_model)
+
+
+kable(summary(ls_model2)$coeff, caption='Model 2 (Response: Total Fire Events)')
+
+
+```
+\newpage
+
+### Model Diagnostics 
+
+Model 1
+
+```{r echo=FALSE, fig.align='center'}
+
+par(mfrow=c(2,2))
+plot(ls_model1)
+
+```
+\newpage
+
+Model 2
+
+```{r echo=FALSE, fig.align='center'}
+par(mfrow=c(2,2))
+plot(ls_model2)
+
+```
+
+
+## Pair-wise correlation among explanatory variables
+
+There is multi-colinearity issue. 
+
+```{r echo=FALSE, results='hide', fig.align='center', fig.height = 7, fig.width = 10}
+x = monthlyFire[,5:16]
+ggpairs(x)
+
+```
+
