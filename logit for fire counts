@@ -1,0 +1,103 @@
+setwd("C:/Users/sinas/Desktop/Project")
+df<- read.csv(file="Annual_forClassification.csv" , header= T)
+attach(df)
+summary(df)
+str(df)
+names(df)
+corr=as.matrix(cor(df))
+x<- as.matrix(df[,-1])
+y<- as.matrix(df[,1])
+
+#first fit lm
+lm.fit= lm(y~x)
+summary(lm.fit)
+
+res=resid(lm.fit)
+yhat=lm.fit$fitted
+plot(yhat,res)
+
+qqnorm(res)
+qqline(res)
+#now logistic
+glm.fit =glm ( y~x , family = binomial )
+summary(glm.fit)
+
+#pearson (overdispersion)
+linpred<- glm.fit$linear.predictors
+pihat<- glm.fit$fitted.values
+pearson<-(y-pihat)/sqrt(pihat*(1-pihat))
+plot(linpred,pearson)
+mean(pearson)
+sqrt(var(pearson))
+##correlation
+library(corrplot)
+cor = cor(df)
+sum(cor(df)>=0.7 & cor(df)<1)/2   ###number of correlation greater than .7
+corrplot(cor, method = "number")
+
+cor1=cor(cor(df[,2:13]))
+corrplot(cor1, method = "number")
+
+#### outlier check
+library(car)
+outlierTest(glm.fit)
+
+## partial residual plots
+crPlots(glm.fit)
+
+## variance inflation factors
+vif(glm.fit)
+
+##mean centering x
+cul.center<- function(x) {
+  apply(x,2,function(y) y-mean(y))
+}
+
+x1<-cul.center(x)
+glm.fit1 =glm ( y~x1 , family = binomial )
+summary(glm.fit1)
+cor1<-cor(x1)
+sum(cor(x1)>=0.7 & cor(x1)<1)/2   ###number of correlation greater than .7
+corrplot(cor1, method = "number")
+#mean centering does not help solving multicollinearity in this case
+pca <- princomp(x, cor=T)
+pc.comp <- pca$scores
+pc.comp1 <- -1*pc.comp[,1] # principal component 1 scores (negated for convenience)
+pc.comp2 <- -1*pc.comp[,56] # principal component 2 scores (negated for convenience)
+plot(pc.comp1, pc.comp2, xlim=c(-6,6), ylim=c(-1,1), type="n") 
+points(pc.comp1[y==0], pc.comp2[y==0], cex=0.5, col="blue")
+points(pc.comp1[y==1], pc.comp2[y==1], cex=0.5, col="red")
+##lasso
+data(df)
+sample <- sample.int(n = nrow(df), size = floor(.75*nrow(df)), replace = F)
+train <- df[sample, ]
+test  <- df[-sample, ]
+library(glmnet)
+lasso=glmnet(x=as.matrix(train[,-1]),y=as.numeric(train[,1]),family = "binomial", alpha=1,nlambda=200)
+plot(lasso,xvar="lambda",main="Lasso Regression Betas for Different Values of the Tuning Parameter")
+
+
+## use 10-fold crossvalidation to find the best lambda
+cv.lasso=cv.glmnet(x=as.matrix(train[,-1]),y=as.numeric(train[,1]),family="binomial", alpha=1,nfolds=10)
+
+## get lambda and best lasso fit
+lambda.lasso=cv.lasso$lambda.min
+lambda.lasso
+
+## getting cvmspe from best value of lambda
+cvmspe.lasso=min(cv.lasso$cvm)
+
+## some plots
+par(mfrow=c(1,2))
+plot(cv.lasso)
+abline(v=log(lambda.lasso))
+plot(lasso,xvar="lambda")
+abline(v=log(lambda.lasso))
+
+## beta estimates for best lambda
+betas.lasso=coef(cv.lasso,s="lambda.1se")
+betas.lasso
+
+yhat.lasso=predict.cv.glmnet(cv.lasso,newx=as.matrix(test[,-1]),Type="response", s="lambda.min")
+mspe.lasso=mean((test$y-yhat.lasso)^2)
+mspe.lasso
