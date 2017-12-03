@@ -1,28 +1,54 @@
 rm(list=ls())
-#setwd("C:/Users/Huy/Desktop/511 project")
-setwd("H:/Stat511/Project")
-data = read.csv("Monthly_forRegression.csv", head = T)
+setwd("C:/Users/Huy/Desktop/511 project")
+data = read.csv("Monthly_forRegression_LatLong.csv", head = T)
+#data = read.csv("Monthly_forRegression.csv", head = T)
 summary(data)
+View(data)
 
-
+#### plot the full model diagnostics
+dev.off()
+fit = lm(Avg_FRP ~ factor(Month) + factor(Year) + Lat + Long + Present_Evap + Present_Precip + 
+           Present_Moisture + Present_Temp + Present_Precip_Anomaly + 
+           Present_Temp_Anomaly + Pre3months_Evap + Pre3months_Precip + 
+           Pre3months_Moisture + Pre3months_Temp + Pre3months_Precip_Anomaly + 
+           Pre3months_Temp_Anomaly, data = data)
+par(mfrow=c(2,2))
+plot(fit)
+#### with log.y
+log.y = log(data$Avg_FRP)                            ####Try a log transform
+fit2 = lm(log.y ~ factor(Month) + factor(Year) + Lat + Long + Present_Evap + Present_Precip + 
+            Present_Moisture + Present_Temp + Present_Precip_Anomaly + 
+            Present_Temp_Anomaly + Pre3months_Evap + Pre3months_Precip + 
+            Pre3months_Moisture + Pre3months_Temp + Pre3months_Precip_Anomaly + 
+            Pre3months_Temp_Anomaly, data = data)
+plot(fit2)
+hist(log.y)
 ####boxplotting response against categorical variables
 par(mfrow=c(1,2))
-plot(Avg_FRP~factor(Month), data = data)
-plot(Avg_FRP~factor(Year), data = data)
-
-##############plotting response against continuous variables
+boxplot(log.y~factor(Month), data = data, xlab = "Month", ylab = "log(Avg_FRP)")$out
+boxplot(log.y~factor(Year), data = data,xlab= "Year", ylab = "log(Avg_FRP)")$out
+##############checking for linearity of response against continuous variables
 ##creating a new data frame with Avg_FRP and continuous predictors
-newdata = data[,-(2:4)]
-par(mfrow=c(3,4))
-
-for (i in 1:12){
-#plot partial residuals  
-  res.y = lm(Avg_FRP~.,data = newdata[,-(i+1)])$res
+newdata = data[,-(2:4)]     ###new data is data excluding categorical variable
+par(mfrow=c(3,3))
+outliers = list()
+for (i in 1:14){
+  #plot partial residuals  
+  res.y = lm(log.y~.,data = newdata[,-(i+1)])$res
   res.x = lm(newdata[,(i+1)]~.-Avg_FRP, data = newdata[,-(i+1)])$res
   plot(res.x,res.y, main = paste("Partial residual plot for ",colnames(newdata)[i+1]))
+  #identify outliers while plotting
+  quan = quantile(res.y, probs = c(.25,.75))   #find 1st and 3rd quartile
+  IQR = quan[2]-quan[1]                        #interquartile range
+  lower = quan[1] - 1.5*IQR
+  upper = quan[2] + 1.5*IQR
+  out.y = res.y[res.y>upper | res.y<lower]
+  out.x = res.x[res.y>upper | res.y<lower]
+  text(out.x, out.y, labels = which(res.y>upper | res.y<lower),cex= 0.8)
   abline(lsfit(res.x,res.y))
+  outliers[[i]] = which(res.y>upper | res.y<lower)
   
-#plot loess and confidence band
+  #plot loess and confidence band
   loess.fit <- loess( y ~ x, data=data.frame(x=res.x,y=res.y))
   x.grid <- seq( from=min(res.x), to=max(res.x), length=200)
   tmp <- predict( loess.fit, newdata=data.frame( x=x.grid),se=T,interval = "confidence")
@@ -31,95 +57,83 @@ for (i in 1:12){
   lines(x.grid,tmp$fit + qt(0.975,tmp$df)*tmp$se, lty=2, col = 2)
 }
 
-
+#Look at outliers
+outliers
+data[c(35, 40,  70,  78, 123, 158, 247, 249, 395, 397, 409, 429, 470, 483, 500, 513, 537, 634),]
 ######################## MLR diagnostics
-dev.off()
-fit = lm(Avg_FRP ~ factor(Month) + factor(Year) + Present_Evap + Present_Precip + 
-           Present_Moisture + Present_Temp + Present_Precip_Anomaly + 
-           Present_Temp_Anomaly + Pre3months_Evap + Pre3months_Precip + 
-           Pre3months_Moisture + Pre3months_Temp + Pre3months_Precip_Anomaly + 
-           Pre3months_Temp_Anomaly, data = data)
-par(mfrow=c(2,2))
-plot(fit)
+
 #interestingly, the residuals don't seem to be correlated
 #let's check wih acf and pacf (you can look at chapter 4.1.4 for more info)
 par(mfrow=c(1,2))
-acf(fit$res)
-pacf(fit$res)
+acf(fit2$res)
+pacf(fit2$res)
 #durbin watson test
 n = nrow(data)
-d = sum((fit$res[-1]-fit$res[-n])^2)/sum(fit$res^2)
+d = sum((fit2$res[-1]-fit2$res[-n])^2)/sum(fit2$res^2)
 d
 #The distribution of the test statistic is difficult to obtain. But when d is close to 2, we fail to reject the null.
 #The closer d is to 0 or 4, the more evidence against the null hypothesis. 
 # In this case, d is very close to 2
-#################### Investigate normality and transformation of response variable
-hist(data$Avg_FRP)                                   ######It looks heavily right-skewed. 
-log.y = log(data$Avg_FRP)                            ####Try a log transform
-fit2 = lm(log.y ~ factor(Month) + factor(Year) + Present_Evap + Present_Precip + 
-            Present_Moisture + Present_Temp + Present_Precip_Anomaly + 
-            Present_Temp_Anomaly + Pre3months_Evap + Pre3months_Precip + 
-            Pre3months_Moisture + Pre3months_Temp + Pre3months_Precip_Anomaly + 
-            Pre3months_Temp_Anomaly, data = data)
-par(mfrow=c(2,2))
-plot(fit2)                                           ###Ah, looks how nice the diagnostics are. this must be a dream.
-summary(fit2)
-#######################
 ##################investigate multicollinearity
+dev.off()
 library(car)
-vif(fit)
+vif(fit2)
 #install.packages("corrplot")
 library(corrplot)
 cor = cor(newdata)
 sum(cor(newdata)>=0.7 & cor(newdata)<1)/2   ###number of correlation greater than .7
 corrplot(cor, method = "number")
 #notice the correlation between temp and evap, some present and pre3months variables
-#It seems like we do have multicollinearity problem. We should try some variable selection method.
-#Howabout stepwise AIC, BIC, lasso?
+
+
+#######################
+### Fixing nonlinearity by adding polynomial terms
+fit3 = lm(log.y ~ factor(Month) + factor(Year) + Lat + Long + Present_Evap + Present_Precip + 
+            Present_Moisture + Present_Temp + Present_Precip_Anomaly + 
+            Present_Temp_Anomaly + Pre3months_Evap + Pre3months_Precip + 
+            Pre3months_Moisture + Pre3months_Temp + Pre3months_Precip_Anomaly + 
+            Pre3months_Temp_Anomaly + I(Lat^2) + I(Pre3months_Precip^2) + I(Pre3months_Precip_Anomaly^2), data = data)
+fit4 = lm(log.y ~ factor(Month) + factor(Year) + Lat + Long + Present_Evap + Present_Precip + 
+            Present_Moisture + Present_Temp + Present_Precip_Anomaly + 
+            Present_Temp_Anomaly + Pre3months_Evap + Pre3months_Precip + 
+            Pre3months_Moisture + Pre3months_Temp + Pre3months_Precip_Anomaly + 
+            Pre3months_Temp_Anomaly + I(Lat^2) + I(Pre3months_Precip^2) + I(Pre3months_Precip_Anomaly^2) +
+            I(Lat^3) + I(Pre3months_Precip^3) + I(Pre3months_Precip_Anomaly^3), data = data)
+
+anova(fit2,fit3, fit4)         #it seems that model with second-degree polynomial (i.e. fit3) is appropriate.
+#we do have multicollinearity problem. We should try some variable selection method.
 #since number of predictors is not prohibitive, let's actually perform best subset
 #install.packages("leaps")
-library(leaps)
-regsubsets.out <- regsubsets(log.y ~ factor(Month) + factor(Year) + Present_Evap + Present_Precip + 
-                                 Present_Moisture + Present_Temp + Present_Precip_Anomaly + 
-                                 Present_Temp_Anomaly + Pre3months_Evap + Pre3months_Precip + 
-                                 Pre3months_Moisture + Pre3months_Temp + Pre3months_Precip_Anomaly + 
-                                 Pre3months_Temp_Anomaly,
-                               data = data,
-                               nbest = 1, # 1 best model for each number of predictors
-                               nvmax = NULL, #NULL for no limit on number of variables
-                               force.in = NULL, force.out = NULL,
-                               intercept = TRUE,
-                               method = "exhaustive")
-reg.sum=summary(regsubsets.out)
-reg.sum$outmat
-#extract min cp, min bic, max adjr2 models
-min.cp = which.min(reg.sum$cp) ###find the minimum location
-min.bic= which.min(reg.sum$bic)
-max.adjr2= which.max(reg.sum$adjr2)
-#plot cp, bic, adjr2
-par(mfrow=c(1,3))
-plot(reg.sum$cp,xlab = "Number of Variables", ylab = "Cp", type = "l", col = "pink")
-points(reg.sum$cp, pch = 19, col = "blue")
-points(min.cp,reg.sum$cp[min.cp], pch = 4, cex = 3, col = "red")
-plot(reg.sum$bic,xlab = "Number of Variables", ylab = "BIC", type = "l", col = "pink")
-points(reg.sum$bic, pch = 19, col = "blue")
-points(min.bic,reg.sum$bic[min.bic], pch = 4, cex = 3, col = "red")
-plot(reg.sum$adjr2,xlab = "Number of Variables", ylab = "Adjusted R2", type = "l", col = "pink")
-points(reg.sum$adjr2, pch = 19, col = "blue")
-points(max.adjr2,reg.sum$adjr2[max.adjr2], pch = 4, cex = 3, col = "red")
+#######extracting the design matrix and obtain Y
+X = model.matrix(fit3)
+View(X)
+Y = log.y
+alldata=data.frame(cbind(Y,X[,-1]))
+n = nrow(alldata)
+V=10
+idx.group=rep(1:V,floor(n/V+1))       #create V groups 
+idx.group=idx.group[1:n]             #truncate down to size n
+idx.group=sample(idx.group)          #stir and mix (maybe not mix :D)
+library(glmnet)
+cvmspe.lasso=rep(NA,V)
+naive = rep(NA,V)
+for(v in 1:V){
+  idx.holdout=which(idx.group==v)
+  ## lasso ridge (trying 100 different lambda values)
+  lasso=glmnet(x=data.matrix(alldata[-idx.holdout,-1]),y=as.numeric(alldata[-idx.holdout,1]),alpha=1,nlambda=100)
+  cv.lasso=cv.glmnet(x=data.matrix(alldata[-idx.holdout,-1]),y=as.numeric(alldata[-idx.holdout,1]),alpha=1,nfolds=10,nlambda=200)
+  lambda.lasso=cv.lasso$lambda.min
+  
+  yhat.lasso=predict(cv.lasso,s="lambda.min",newx=data.matrix(alldata[idx.holdout,-1]))
+  cvmspe.lasso[v]=mean((exp(alldata$Y[idx.holdout])-exp(yhat.lasso))^2)     #mspe on the original scale, not log scale
+  naive[v] = mean((exp(alldata$Y[idx.holdout]) - exp(mean(alldata$Y[-idx.holdout])))^2)
+}
+mean(cvmspe.lasso)
+mean(naive)
 
-#choose model with 14 variables for interpretability and high adj r2
-#extract model with 14 variable
-reg.sum$which[14,]
-#create new data with only 14 variable without having to dummy code
-X = model.matrix(fit2)
-colnames(X)
-summary(data$Month)
-condensed.data = data.frame(log.y,X[,-c(1,6,9,11:19,22,23,25,27,29,32)])
-View(condensed.data)
+betas.lasso=coef(cv.lasso,s="lambda.1se")
+betas.lasso
 
-#fit the model after variable selection
-fit3 = lm(log.y~.,data = condensed.data)
-par(mfrow=c(2,2))
-plot(fit3)
-summary(fit3)
+#checking for multicollinearity again based on lasso betas
+fit5 = lm(log.y~factor(Year) + Lat + Long + Present_Evap + Present_Precip + Present_Moisture+Pre3months_Precip+Pre3months_Temp_Anomaly, data = data)
+vif(fit5)
